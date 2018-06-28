@@ -8,5 +8,5 @@ public class CppNative {
     static {
         System.loadLibrary("testjni");
     }
-    public native static int getInt(byte[] jarray, String jstr);
+    public native static int getInt(byte[] jarray, String jstr, ComplexClass cc);
 }

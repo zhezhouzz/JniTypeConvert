@@ -194,21 +194,21 @@ public:
     JNIEnv* env;
 };
 
-class CppTypeClass final : public BaseCppTypeInterface {
-public:
-    CppTypeClass(_JNIEnv* env_, const std::any& jvalue) : env(env_) {
+// class CppTypeClass final : public BaseCppTypeInterface {
+// public:
+//     CppTypeClass(_JNIEnv* env_, const std::any& jvalue) : env(env_) {
 
-    }
-    ~CppTypeClass() {
-        LOGD("%s\n", __PRETTY_FUNCTION__);
-        env->ReleaseStringUTFChars(*java_jstring, (const char*)(value));
-    }
-    std::any GetValue() const {
-        LOGD("%s\n", __PRETTY_FUNCTION__);
-        return std::any(value);
-    }
-    std::vector<std::shared_ptr<BaseCppTypeInterface>> dependent_list;
-};
+//     }
+//     ~CppTypeClass() {
+//         LOGD("%s\n", __PRETTY_FUNCTION__);
+//         env->ReleaseStringUTFChars(*java_jstring, (const char*)(value));
+//     }
+//     std::any GetValue() const {
+//         LOGD("%s\n", __PRETTY_FUNCTION__);
+//         return std::any(value);
+//     }
+//     std::vector<std::shared_ptr<BaseCppTypeInterface>> dependent_list;
+// };
 
 template <typename T>
 std::shared_ptr<BaseCppTypeInterface> BaseCppTypeInterface::make(JNIEnv* env, const T& jvalue) {
@@ -270,20 +270,20 @@ typedef struct FacePassImage {
     uint64_t track_id;
 } FacePassImage;
 
-FacePassImage make_face_pass_image(const MultipleType& data, const MultipleType& width,
-                                   const MultipleType& height, const MultipleType& type) {
-    FacePassImage ret;
-    auto data_ = std::any_cast<CppCharArray>(data.any_value);
-    ret.data = (unsigned char*)(data_.data);
-    ret.width = std::any_cast<int>(width.any_value);
-    ret.height = std::any_cast<int>(height.any_value);
-    ret.type = static_cast<FacePassImageType>(std::any_cast<int>(type.any_value));
-    return ret;
-}
+//FacePassImage make_face_pass_image(const MultipleType& data, const MultipleType& width,
+//                                   const MultipleType& height, const MultipleType& type) {
+//    FacePassImage ret;
+//    auto data_ = std::any_cast<CppCharArray>(data.any_value);
+//    ret.data = (unsigned char*)(data_.data);
+//    ret.width = std::any_cast<int>(width.any_value);
+//    ret.height = std::any_cast<int>(height.any_value);
+//    ret.type = static_cast<FacePassImageType>(std::any_cast<int>(type.any_value));
+//    return ret;
+//}
 
 JNIEXPORT jint JNICALL Java_com_example_zhouzhe_testjni_CppNative_getInt(JNIEnv* env, jclass,
                                                                          jbyteArray jarray,
-                                                                         jstring jstr) {
+                                                                         jstring jstr, jclass complex_class) {
     LOGD("Java_com_example_zhouzhe_testjni_CppNative_getInt\n");
     jint test_jint_a = 1123;
     jfloat test_jfloat_a = 1.2f;

@@ -13,7 +13,7 @@ extern "C" {
  * Signature: ()I
  */
 JNIEXPORT jint JNICALL Java_com_example_zhouzhe_testjni_CppNative_getInt
-  (JNIEnv *, jclass, jbyteArray, jstring);
+  (JNIEnv *, jclass, jbyteArray, jstring, jclass);
 
 #ifdef __cplusplus
 }
