@@ -10,6 +10,9 @@
 #include <typeinfo>
 #include <unordered_map>
 #include <variant>
+#include "json.hpp"
+
+using json = nlohmann::json;
 
 using namespace std::literals;
 
@@ -270,7 +273,7 @@ typedef struct FacePassImage {
     uint64_t track_id;
 } FacePassImage;
 
-//FacePassImage make_face_pass_image(const MultipleType& data, const MultipleType& width,
+// FacePassImage make_face_pass_image(const MultipleType& data, const MultipleType& width,
 //                                   const MultipleType& height, const MultipleType& type) {
 //    FacePassImage ret;
 //    auto data_ = std::any_cast<CppCharArray>(data.any_value);
@@ -283,7 +286,8 @@ typedef struct FacePassImage {
 
 JNIEXPORT jint JNICALL Java_com_example_zhouzhe_testjni_CppNative_getInt(JNIEnv* env, jclass,
                                                                          jbyteArray jarray,
-                                                                         jstring jstr, jclass complex_class) {
+                                                                         jstring jstr,
+                                                                         jobject complex_class) {
     LOGD("Java_com_example_zhouzhe_testjni_CppNative_getInt\n");
     jint test_jint_a = 1123;
     jfloat test_jfloat_a = 1.2f;
@@ -296,5 +300,30 @@ JNIEXPORT jint JNICALL Java_com_example_zhouzhe_testjni_CppNative_getInt(JNIEnv*
     LOGD("b.value.data = %s\n", BaseCppTypeInterface::base_type_cast<ByteArray>(b).data);
     auto c = BaseCppTypeInterface::make(env, &jstr);
     LOGD("c.value.data = %s\n", BaseCppTypeInterface::base_type_cast<char*>(c));
+    jclass clz = env->GetObjectClass(complex_class);
+    jmethodID mid = env->GetMethodID(clz, "getDeclaredFieldsString", "()Ljava/lang/String;");
+    jstring declare_string = (jstring)env->CallObjectMethod(complex_class, mid);
+    auto d = BaseCppTypeInterface::make(env, &declare_string);
+    LOGD("declare_string.data = %s\n", BaseCppTypeInterface::base_type_cast<char*>(d));
+    json j_reflect = json::parse(std::string(BaseCppTypeInterface::base_type_cast<char*>(d)));
+    for (int i = 0; i < j_reflect.size(); i++) {
+        std::string Modifier = j_reflect[i]["Modifier"];
+        std::string Type = j_reflect[i]["Type"];
+        std::string ClassName = j_reflect[i]["ClassName"];
+        std::string FieldName = j_reflect[i]["FieldName"];
+        if (Type == "int") {
+            jfieldID fieldID = env->GetFieldID(clz, FieldName.c_str(), "I");
+            auto test = BaseCppTypeInterface::make(env, env->GetIntField(complex_class, fieldID));
+            LOGD("[class]%s::%s.%s = %d\n", Type.c_str(), ClassName.c_str(), FieldName.c_str(),
+                 BaseCppTypeInterface::base_type_cast<int>(test));
+        } else if (Type == "float") {
+            jfieldID fieldID = env->GetFieldID(clz, FieldName.c_str(), "F");
+            auto test = BaseCppTypeInterface::make(env, env->GetFloatField(complex_class, fieldID));
+            LOGD("[class]%s::%s.%s = %f\n", Type.c_str(), ClassName.c_str(), FieldName.c_str(),
+                 BaseCppTypeInterface::base_type_cast<float>(test));
+        } else {
+            LOGD("[class]%s::%s.%s is a jobject\n", Type.c_str(), ClassName.c_str(), FieldName.c_str());
+        }
+    }
     return 11;
 }
