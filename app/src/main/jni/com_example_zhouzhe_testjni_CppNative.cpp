@@ -24,6 +24,8 @@ using namespace std::literals;
         return x##_value;  \
     }
 
+typedef void(*UpdateFunType)(int64_t,int64_t,int64_t);
+
 jint jint_value;
 jfloat jfloat_value;
 jlong jlong_value;
@@ -42,7 +44,7 @@ public:
     virtual ~BaseCppTypeInterface() = default;
     virtual std::any GetValue() const = 0;
     template <typename T>
-    static T base_type_cast(const std::shared_ptr<BaseCppTypeInterface>& ptr);
+    static T base_type_cast(const std::shared_ptr<BaseCppTypeInterface>& ptr, UpdateFunType constuctor = nullptr);
     template <typename T>
     static std::shared_ptr<BaseCppTypeInterface> make(JNIEnv* env, const T& jvalue);
 };
@@ -197,6 +199,40 @@ public:
     JNIEnv* env;
 };
 
+class CppTypeJClass final : public BaseCppTypeInterface {
+public:
+    CppTypeJClass(_JNIEnv* env_, const std::any& jvalue) {
+        jobject* java_object_ = std::any_cast<jobject*>(jvalue);
+        jclass clz = env_->GetObjectClass(*java_object_);
+        jmethodID mid = env_->GetMethodID(clz, "getDeclaredFieldsString", "()Ljava/lang/String;");
+        jstring declare_string = (jstring)env_->CallObjectMethod(*java_object_, mid);
+        auto declare_cstring = BaseCppTypeInterface::make(env_, &declare_string);
+        json j_reflect =
+            json::parse(std::string(BaseCppTypeInterface::base_type_cast<char*>(declare_cstring)));
+        for (int i = 0; i < j_reflect.size(); i++) {
+            std::string FieldName = j_reflect[i]["FieldName"];
+            std::string Type = j_reflect[i]["Type"];
+            if (Type == "int") {
+                jfieldID fieldID = env_->GetFieldID(clz, FieldName.c_str(), "I");
+                field_map[FieldName] =
+                    BaseCppTypeInterface::make(env_, env_->GetIntField(*java_object_, fieldID));
+            } else if (Type == "float") {
+                jfieldID fieldID = env_->GetFieldID(clz, FieldName.c_str(), "F");
+                field_map[FieldName] =
+                    BaseCppTypeInterface::make(env_, env_->GetFloatField(*java_object_, fieldID));
+            } else {
+                LOGD("[class]%s is a jobject\n", FieldName.c_str());
+            }
+        }
+    }
+    ~CppTypeJClass() { LOGD("%s\n", __PRETTY_FUNCTION__); }
+    std::any GetValue() const {
+        LOGD("%s\n", __PRETTY_FUNCTION__);
+        return std::any(field_map);
+    }
+    std::unordered_map<std::string, std::shared_ptr<BaseCppTypeInterface>> field_map;
+};
+
 // class CppTypeClass final : public BaseCppTypeInterface {
 // public:
 //     CppTypeClass(_JNIEnv* env_, const std::any& jvalue) : env(env_) {
@@ -212,6 +248,29 @@ public:
 //     }
 //     std::vector<std::shared_ptr<BaseCppTypeInterface>> dependent_list;
 // };
+
+class ComplexCPPClass {
+public:
+    int intValue = 2;
+    float floatValue = 2.2f;
+    ComplexCPPClass() {
+        return;
+    };
+};
+
+void UpdateComplexCPPClass(int64_t complex_cpp_class_ptr_, int64_t a_, int64_t b_) {
+    DDEBUG;
+    float* b = (float*)(b_);DDEBUG;
+    LOGD("[[b]] = %f\n", *b);DDEBUG;
+    int* a = (int*)(a_);DDEBUG;
+    LOGD("[[a]] = %f\n", *a);DDEBUG;
+    ComplexCPPClass* complex_cpp_class_ptr = (ComplexCPPClass*)(complex_cpp_class_ptr_);DDEBUG;
+    complex_cpp_class_ptr->intValue = *a;DDEBUG;
+    complex_cpp_class_ptr->floatValue = *b;DDEBUG;
+    delete a;DDEBUG;
+    delete b;DDEBUG;
+    return;
+};
 
 template <typename T>
 std::shared_ptr<BaseCppTypeInterface> BaseCppTypeInterface::make(JNIEnv* env, const T& jvalue) {
@@ -246,12 +305,59 @@ std::shared_ptr<BaseCppTypeInterface> BaseCppTypeInterface::make(JNIEnv* env, co
         return std::make_shared<CppTypeString>(env, std::any(jvalue));
     }
     if (typeid(jvalue).hash_code() == typeid(jobject_value).hash_code()) {
-        return std::make_shared<CppTypeString>(env, std::any(jvalue));
+        LOGD("[IS JOBJECT]\n");
+        return std::make_shared<CppTypeJClass>(env, std::any(jvalue));
     }
 }
 
 template <typename T>
-T BaseCppTypeInterface::base_type_cast(const std::shared_ptr<BaseCppTypeInterface>& ptr) {
+T* MakePointer() {
+    return new T();
+}
+
+template <typename T>
+T BaseCppTypeInterface::base_type_cast(const std::shared_ptr<BaseCppTypeInterface>& ptr, UpdateFunType constuctor) {
+    if ((not std::is_same<T, int>::value) and (not std::is_same<T, float>::value) and
+        (not std::is_same<T, double>::value) and (not std::is_same<T, uint64_t>::value) and
+        (not std::is_same<T, uint16_t>::value) and (not std::is_same<T, uint8_t>::value) and
+        (not std::is_same<T, int64_t>::value) and (not std::is_same<T, int16_t>::value) and
+        (not std::is_same<T, int8_t>::value) and (not std::is_same<T, char*>::value) and
+        (not std::is_same<T, ByteArray*>::value)) {
+        LOGD("[IS JOBJECT]\n");
+        auto field_map =
+            std::any_cast<std::unordered_map<std::string, std::shared_ptr<BaseCppTypeInterface>>>(
+                ptr->GetValue());
+        std::vector<std::any>* any_list = new std::vector<std::any>();
+        int* a = new int;
+        float* b = new float;
+        for (auto i = field_map.begin(); i != field_map.end(); i++) {
+            LOGD("[JOBJECT][%s]\n", i->first.c_str());
+            if (i->first == "intValue") {
+                *a = BaseCppTypeInterface::base_type_cast<int>(i->second);
+//                any_list->push_back(std::any(BaseCppTypeInterface::base_type_cast<int>(i->second)));
+            } else {
+                *b = BaseCppTypeInterface::base_type_cast<float>(i->second);
+//                any_list->push_back(std::any(BaseCppTypeInterface::base_type_cast<float>(i->second)));
+            }
+        }
+        DDEBUG;
+        if (constuctor == nullptr) {
+            return std::any_cast<T>(std::any(MakePointer<typename std::remove_pointer<T>::type>()));
+        } else {
+            T ret = std::any_cast<T>(std::any(MakePointer<typename std::remove_pointer<T>::type>()));
+            DDEBUG;
+            constuctor((int64_t)(ret), int64_t(a), (int64_t)(b));
+            return ret;
+        }
+    } else if (std::is_same<T, ByteArray*>::value) {
+        DDEBUG;
+        T ret = std::any_cast<T>(std::any(MakePointer<typename std::remove_pointer<T>::type>()));DDEBUG;
+        ByteArray buffer = std::any_cast<ByteArray>(ptr->GetValue());DDEBUG;
+        ByteArray* ret_buffer = new ByteArray;
+        ret_buffer->data = buffer.data;
+        ret_buffer->length = buffer.length;
+        return std::any_cast<T>(ret_buffer);
+    }
     return std::any_cast<T>(ptr->GetValue());
 }
 
@@ -297,7 +403,8 @@ JNIEXPORT jint JNICALL Java_com_example_zhouzhe_testjni_CppNative_getInt(JNIEnv*
     auto a = BaseCppTypeInterface::make(env, test_jint_a);
     LOGD("a.value = %d\n", BaseCppTypeInterface::base_type_cast<int>(a));
     auto b = BaseCppTypeInterface::make(env, &jarray);
-    LOGD("b.value.data = %s\n", BaseCppTypeInterface::base_type_cast<ByteArray>(b).data);
+    DDEBUG;
+    LOGD("b.value.data = %s\n", BaseCppTypeInterface::base_type_cast<ByteArray*>(b, UpdateByteArray)->data);
     auto c = BaseCppTypeInterface::make(env, &jstr);
     LOGD("c.value.data = %s\n", BaseCppTypeInterface::base_type_cast<char*>(c));
     jclass clz = env->GetObjectClass(complex_class);
@@ -322,8 +429,15 @@ JNIEXPORT jint JNICALL Java_com_example_zhouzhe_testjni_CppNative_getInt(JNIEnv*
             LOGD("[class]%s::%s.%s = %f\n", Type.c_str(), ClassName.c_str(), FieldName.c_str(),
                  BaseCppTypeInterface::base_type_cast<float>(test));
         } else {
-            LOGD("[class]%s::%s.%s is a jobject\n", Type.c_str(), ClassName.c_str(), FieldName.c_str());
+            LOGD("[class]%s::%s.%s is a jobject\n", Type.c_str(), ClassName.c_str(),
+                 FieldName.c_str());
         }
     }
+    auto e = BaseCppTypeInterface::make(env, &complex_class);
+    ComplexCPPClass* e_ = BaseCppTypeInterface::base_type_cast<ComplexCPPClass*>(e, UpdateComplexCPPClass);
+    DDEBUG;
+    LOGD("e_->intValue = %d\n", e_->intValue);
+    DDEBUG;
+    LOGD("e_->floatValue = %f\n", e_->floatValue);
     return 11;
 }
